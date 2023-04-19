@@ -1,0 +1,38 @@
+[package]
+name = "ascc"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name="ascc"
+src="src/lib.rs"
+
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+rust_decimal = "1.29.1"
+chrono = {version="0.4.24", features=["serde"]}
+anyhow = {version="1.0.70", features=["backtrace"]}
+
+indicatif = { version="0.17.3", features=["rayon"]}
+
+rayon = "1.7.0"
+itertools = "0.10.5"
+
+serde = "1.0.160"
+serde_json = "1.0.96"
+ciborium = "0.2.0"
+
+clap = {version="4.2.2", features=["derive"]}
+
+pyo3 = {version="0.18.3", features=["extension-module", "anyhow"], optional=true}
+polars = {version="0.28.0", features=["parquet", "dtype-decimal"], optional=true}
+arrow2 = {version="0.17.0", optional=true}
+
+[features]
+py-ext = ["dep:pyo3"]
+dataframes = ["dep:polars", "dep:arrow2"]
+
+[[example]]
+name="export"
+required-features=["dataframes"]

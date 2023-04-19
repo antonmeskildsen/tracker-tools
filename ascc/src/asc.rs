@@ -1,43 +1,14 @@
-use crate::asc::Element::Other;
 use anyhow::anyhow;
 
-use rust_decimal::Decimal;
+use crate::common::Eye;
+use crate::{Decimal, NaiveDateTime};
+use itertools::Itertools;
 use std::cmp::min;
 use std::str::FromStr;
 
-// pub struct BinocularSample {
-//     time: Decimal,
-//     left: Option<EyeSample>,
-//     right: Option<EyeSample>,
-//     interpolated: bool,
-//     left_cr_status: CRStatus,
-//     right_cr_status: CRStatus,
-// }
-//
-// pub enum CRStatus {
-//     Found,
-//     Recovering,
-//     Missing,
-// }
-//
-// pub struct EyeSample {
-//     pos: [Decimal; 2],
-//     pupil_area: Decimal,
-//     velocity: Option<[Decimal; 2]>,
-// }
-//
-// pub struct Message {
-//     time: Decimal,
-//     msg: String,
-// }
-//
-// pub struct Trial {
-//     id: u32,
-//     samples: Vec<BinocularSample>
-// }
-
+#[derive(Debug, Clone)]
 pub enum Element {
-    Preamble(String),
+    Preamble(PreambleMsg),
     Msg(Decimal, MsgType),
     Comment(String),
     Other(String),
@@ -103,11 +74,11 @@ pub enum Element {
         start_time: Decimal,
         end_time: Decimal,
         duration: Decimal,
-        start_pos_x: Decimal,
-        start_pos_y: Decimal,
-        end_pos_x: Decimal,
-        end_pos_y: Decimal,
-        movement_angle: Decimal,
+        start_pos_x: Option<Decimal>,
+        start_pos_y: Option<Decimal>,
+        end_pos_x: Option<Decimal>,
+        end_pos_y: Option<Decimal>,
+        movement_angle: Option<Decimal>,
         peak_velocity: Decimal,
         res_x: Decimal,
         res_y: Decimal,
@@ -140,6 +111,7 @@ pub enum Element {
     Blank,
 }
 
+#[derive(Debug, Clone)]
 pub struct DataOptions {
     res: bool,
     rate: Decimal,
@@ -147,17 +119,14 @@ pub struct DataOptions {
     filter: FilterType,
 }
 
+#[derive(Debug, Clone)]
 pub enum DataType {
     Gaze,
     Href,
     Pupil,
 }
 
-pub enum Eye {
-    L,
-    R,
-}
-
+#[derive(Debug, Clone)]
 pub enum MsgType {
     TrialId(u32),
     TrialResult(u32),
@@ -186,45 +155,82 @@ pub enum MsgType {
     PupilDataType(String),
     TrialVarLabels(Vec<String>),
     TrialVarGrouping(Vec<String>),
-    TrialVarData(Vec<(String, String)>),
-    TargetPos(Vec<Target>),
+    TrialData(TrialData),
+    Other(String),
+    RawData {
+        time: Decimal,
+        left: RawSampleMsg,
+        right: RawSampleMsg,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub struct RawSampleMsg {
+    pub pupil_pos_x: Decimal,
+    pub pupil_pos_y: Decimal,
+    pub pupil_area: Decimal,
+    pub pupil_size_x: Decimal,
+    pub pupil_size_y: Decimal,
+    pub cr_pos_x: Decimal,
+    pub cr_pos_y: Decimal,
+    pub cr_area: Decimal,
+}
+
+#[derive(Debug, Clone)]
+pub enum PreambleMsg {
+    DateTime(NaiveDateTime),
+    Other(String),
+    Empty,
+}
+
+#[derive(Debug, Clone)]
+pub enum TrialData {
+    VarValues(Vec<String>),
+    Targets(Vec<Target>),
     Other(String),
 }
 
+#[derive(Debug, Clone)]
 pub struct Target {
-    name: String,
-    position: [u32; 2],
-    visible: bool,
-    interpolate: bool,
+    pub name: String,
+    pub position: [u32; 2],
+    pub visible: bool,
+    pub interpolate: bool,
 }
 
+#[derive(Debug, Clone)]
 pub enum TrackingAlgorithm {
     Ellipse,
     Centroid,
 }
 
+#[derive(Debug, Clone)]
 pub struct ThresholdSpec {
     pupil: u32,
     cr: u32,
 }
 
+#[derive(Debug, Clone)]
 pub enum TrackingMode {
     Pupil,
     CR,
 }
 
+#[derive(Debug, Clone)]
 pub enum FilterType {
     Off,
     Standard,
     Extra,
 }
 
+#[derive(Debug, Clone)]
 pub enum EyeSpecification {
     L,
     R,
     LR,
 }
 
+#[derive(Debug, Clone)]
 pub enum MountConfiguration {
     MTABLER,
     BTABLER,
@@ -240,9 +246,13 @@ pub enum MountConfiguration {
     BLRR,
 }
 
+pub fn from_decimal(s: &str) -> Result<Decimal, rust_decimal::Error> {
+    Decimal::from_str(s).or_else(|_| Decimal::from_scientific(s))
+}
+
 pub fn maybe_decimal(s: &str) -> Result<Option<Decimal>, rust_decimal::Error> {
     (s != ".")
-        .then(|| Decimal::from_str(s))
+        .then(|| from_decimal(s))
         .map_or(Ok(None), |v| v.map(Some))
 }
 
@@ -255,19 +265,96 @@ impl FromStr for Element {
             Ok(Element::Blank)
         } else {
             match parts[0] {
-                "**" => Ok(Element::Preamble(
-                    s[min(parts[0].len() + 1, s.len())..].to_string(),
-                )),
+                "**" => Ok(Element::Preamble(PreambleMsg::from_str(
+                    &s[min(parts[0].len() + 1, s.len())..],
+                )?)),
                 "MSG" => Ok(Element::Msg(
-                    Decimal::from_str(parts[1])?,
+                    from_decimal(parts[1])?,
                     MsgType::from_str(&s[parts[0].len() + parts[1].len() + 1..])?,
                 )),
                 "#" | ";" | "//" => Ok(Element::Comment(s[parts[0].len() + 1..].to_string())),
                 "INPUT" => Ok(Element::Input {
-                    time: Decimal::from_str(parts[1])?,
+                    time: from_decimal(parts[1])?,
                     value: u32::from_str(parts[2])?,
                 }),
-                _ => match Decimal::from_str(parts[0]) {
+                "SSACC" => {
+                    let eye = Eye::from_str(parts[1])?;
+                    let time = from_decimal(parts[2])?;
+                    Ok(Element::SaccadeStart { eye, time })
+                }
+                "SFIX" => {
+                    let eye = Eye::from_str(parts[1])?;
+                    let time = from_decimal(parts[2])?;
+                    Ok(Element::FixationStart { eye, time })
+                }
+                "SBLINK" => {
+                    let eye = Eye::from_str(parts[1])?;
+                    let time = from_decimal(parts[2])?;
+                    Ok(Element::BlinkStart { eye, time })
+                }
+                "ESACC" => {
+                    let eye = Eye::from_str(parts[1])?;
+                    let start_time = from_decimal(parts[2])?;
+                    let end_time = from_decimal(parts[3])?;
+                    let duration = from_decimal(parts[4])?;
+                    let start_pos_x = maybe_decimal(parts[5])?;
+                    let start_pos_y = maybe_decimal(parts[6])?;
+                    let end_pos_x = maybe_decimal(parts[7])?;
+                    let end_pos_y = maybe_decimal(parts[8])?;
+                    let movement_angle = maybe_decimal(parts[9])?;
+                    let peak_velocity = from_decimal(parts[10])?;
+                    let res_x = from_decimal(parts[11])?;
+                    let res_y = from_decimal(parts[12])?;
+                    Ok(Element::SaccadeEnd {
+                        eye,
+                        start_time,
+                        end_time,
+                        duration,
+                        start_pos_x,
+                        start_pos_y,
+                        end_pos_x,
+                        end_pos_y,
+                        movement_angle,
+                        peak_velocity,
+                        res_x,
+                        res_y,
+                    })
+                }
+                "EFIX" => {
+                    let eye = Eye::from_str(parts[1])?;
+                    let start_time = from_decimal(parts[2])?;
+                    let end_time = from_decimal(parts[3])?;
+                    let duration = from_decimal(parts[4])?;
+                    let average_pos_x = from_decimal(parts[5])?;
+                    let average_pos_y = from_decimal(parts[6])?;
+                    let average_pupil_size = from_decimal(parts[7])?;
+                    let res_x = from_decimal(parts[8])?;
+                    let res_y = from_decimal(parts[9])?;
+                    Ok(Element::FixationEnd {
+                        eye,
+                        start_time,
+                        end_time,
+                        duration,
+                        average_pos_x,
+                        average_pos_y,
+                        average_pupil_size,
+                        res_x,
+                        res_y,
+                    })
+                }
+                "EBLINK" => {
+                    let eye = Eye::from_str(parts[1])?;
+                    let start_time = from_decimal(parts[2])?;
+                    let end_time = from_decimal(parts[3])?;
+                    let duration = from_decimal(parts[4])?;
+                    Ok(Element::BlinkEnd {
+                        eye,
+                        start_time,
+                        end_time,
+                        duration,
+                    })
+                }
+                _ => match from_decimal(parts[0]) {
                     Err(_) => Ok(Element::Other(s.to_string())),
                     Ok(time) => {
                         let left_pos_x = maybe_decimal(parts[1])?;
@@ -333,7 +420,7 @@ impl FromStr for MsgType {
             "TRIAL_RESULT" => Ok(MsgType::TrialResult(u32::from_str(parts[1])?)),
             "RECCFG" => {
                 let tracking_mode = TrackingMode::from_str(parts[1])?;
-                let sampling_rate = Decimal::from_str(parts[2])?;
+                let sampling_rate = from_decimal(parts[2])?;
                 let file_sample_filter = FilterType::from_str(parts[3])?;
                 let link_sample_filter = FilterType::from_str(parts[4])?;
                 let eyes = EyeSpecification::from_str(parts[5])?;
@@ -349,10 +436,10 @@ impl FromStr for MsgType {
                 parts[1],
             )?)),
             "GAZE_COORDS" => {
-                let left = Decimal::from_str(parts[1])?;
-                let top = Decimal::from_str(parts[2])?;
-                let right = Decimal::from_str(parts[3])?;
-                let bottom = Decimal::from_str(parts[4])?;
+                let left = from_decimal(parts[1])?;
+                let top = from_decimal(parts[2])?;
+                let right = from_decimal(parts[3])?;
+                let bottom = from_decimal(parts[4])?;
                 Ok(MsgType::GazeCoordinates {
                     left,
                     top,
@@ -381,10 +468,10 @@ impl FromStr for MsgType {
             )?)),
             "ELCL_PCR_PARAM" => Ok(MsgType::PcrParameter(
                 u32::from_str(parts[1])?,
-                Decimal::from_str(parts[2])?,
+                from_decimal(parts[2])?,
             )),
             "CAMERA_LENS_FOCAL_LENGTH" => {
-                Ok(MsgType::CameraLensFocalLength(Decimal::from_str(parts[1])?))
+                Ok(MsgType::CameraLensFocalLength(from_decimal(parts[1])?))
             }
             "ELCL_WINDOW_SIZES" => {
                 let a = u32::from_str(parts[1])?;
@@ -398,7 +485,95 @@ impl FromStr for MsgType {
                 let elems = parts[1..].iter().map(|s| s.to_string()).collect();
                 Ok(MsgType::TrialVarLabels(elems))
             }
+            "!V" => Ok(MsgType::TrialData(TrialData::from_str(
+                &s[parts[0].len() + 1..],
+            )?)),
+            "L" => {
+                let parts: Vec<&str> = s[2..].split_whitespace().collect();
+
+                let time = from_decimal(parts[0])?;
+                let left = RawSampleMsg::from_str_slice(&parts[1..9])?;
+                let right = RawSampleMsg::from_str_slice(&parts[10..])?;
+                Ok(MsgType::RawData { time, left, right })
+            }
             _ => Ok(MsgType::Other(s.to_string())),
+        }
+    }
+}
+
+impl RawSampleMsg {
+    fn from_str_slice(parts: &[&str]) -> Result<Self, rust_decimal::Error> {
+        Ok(RawSampleMsg {
+            pupil_pos_x: from_decimal(parts[0])?,
+            pupil_pos_y: from_decimal(parts[1])?,
+            pupil_area: from_decimal(parts[2])?,
+            pupil_size_x: from_decimal(parts[3])?,
+            pupil_size_y: from_decimal(parts[4])?,
+            cr_pos_x: from_decimal(parts[5])?,
+            cr_pos_y: from_decimal(parts[6])?,
+            cr_area: from_decimal(parts[7])?,
+        })
+    }
+}
+
+impl FromStr for PreambleMsg {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Some(tp) = s.split_whitespace().next() {
+            match tp {
+                "DATE:" => Ok(PreambleMsg::DateTime(NaiveDateTime::parse_from_str(
+                    &s[tp.len() + 1..],
+                    "%a %b %d %H:%M:%S %Y",
+                )?)),
+                _ => Ok(PreambleMsg::Other(s.to_string())),
+            }
+        } else {
+            Ok(PreambleMsg::Empty)
+        }
+    }
+}
+
+impl Target {
+    fn from_str_slice(s: &[&str]) -> anyhow::Result<Self> {
+        let name = s[0].to_string();
+        let position_x_str = s[1];
+        let position_x = u32::from_str(&position_x_str[1..position_x_str.len() - 1])?;
+        let position_y_str = s[2];
+        let position_y = u32::from_str(&position_y_str[..position_y_str.len() - 1])?;
+        let visible = i32::from_str(s[3])? == 1;
+        let interpolate = i32::from_str(s[4])? == 1;
+        Ok(Target {
+            name,
+            position: [position_x, position_y],
+            visible,
+            interpolate,
+        })
+    }
+}
+
+impl FromStr for TrialData {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let parts: Vec<&str> = s.split_whitespace().collect();
+        match parts[0] {
+            "TRIAL_VAR_DATA" => {
+                let elems: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+                Ok(TrialData::VarValues(elems))
+            }
+            "TARGET_POS" => {
+                let mut targets = Vec::new();
+                if parts.len() == 6 {
+                    targets.push(Target::from_str_slice(&parts[1..6])?)
+                }
+                if parts.len() == 11 {
+                    targets.push(Target::from_str_slice(&parts[6..12])?)
+                }
+
+                Ok(TrialData::Targets(targets))
+            }
+            _ => Ok(TrialData::Other(s.to_string())),
         }
     }
 }

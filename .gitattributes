@@ -4,6 +4,7 @@
 *.lock filter=lfs diff=lfs merge=lfs -text
 *.toml filter=lfs diff=lfs merge=lfs -text
 *.rs filter=lfs diff=lfs merge=lfs -text
+*.py filter=lfs diff=lfs merge=lfs -text
 *.rs !text !filter !merge !diff
 *.toml !text !filter !merge !diff
 .gitignore !text !filter !merge !diff
