@@ -11,7 +11,7 @@ pub fn main() -> anyhow::Result<()> {
     let data: Experiment = ciborium::de::from_reader(bf)?;
 
     println!("Extracting variables");
-    let mut df = data.trials[0].samples()?;
+    let mut df = data.trials[0].cam_frames()?;
 
     println!("{}", df);
 

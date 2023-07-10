@@ -76,12 +76,12 @@ impl Experiment {
     }
 }
 
-pub fn decimal_to_f64(input: Vec<Decimal>) -> Vec<f64> {
-    input
-        .into_iter()
-        .map(|v| v.to_f64().unwrap_or_default())
-        .collect()
-}
+// pub fn decimal_to_f64(input: Vec<Decimal>) -> Vec<f64> {
+//     input
+//         .into_iter()
+//         .map(|v| v.to_f64().unwrap_or_default())
+//         .collect()
+// }
 
 #[cfg(feature = "py-ext")]
 pub fn convert_decimal(input: Decimal) -> AnyValue<'static> {
@@ -104,12 +104,12 @@ pub fn maybe_decimal_to_arrow_decimal(input: Vec<Option<Decimal>>) -> Vec<AnyVal
         .collect()
 }
 
-pub fn maybe_decimal_to_f64(input: Vec<Option<Decimal>>) -> Vec<Option<f64>> {
-    input
-        .into_iter()
-        .map(|v| v.map(|v| v.to_f64().unwrap_or_default()))
-        .collect()
-}
+// pub fn maybe_decimal_to_f64(input: Vec<Option<Decimal>>) -> Vec<Option<f64>> {
+//     input
+//         .into_iter()
+//         .map(|v| v.map(|v| v.to_f64().unwrap_or_default()))
+//         .collect()
+// }
 
 impl Trial {
     pub fn samples(&self) -> PolarsResult<DataFrame> {
@@ -145,6 +145,34 @@ impl Trial {
             "right_area" => maybe_decimal_to_arrow_decimal(ls_right_area),
             "res_x" => maybe_decimal_to_arrow_decimal(ls_res_x),
             "res_y" => maybe_decimal_to_arrow_decimal(ls_res_y),
+        ]
+    }
+
+    pub fn cam_frames(&self) -> PolarsResult<DataFrame> {
+        let mut ls_name = Vec::new();
+        let mut ls_idx = Vec::new();
+        let mut ls_cam_time = Vec::new();
+        let mut ls_sys_time = Vec::new();
+        let mut ls_process_time = Vec::new();
+        let mut ls_eyelink_time = Vec::new();
+
+        for f in &self.camera_frames {
+            ls_name.push(f.name.clone());
+            ls_idx.push(f.idx);
+            ls_cam_time.push(f.cam_time);
+            ls_sys_time.push(f.sys_time);
+            ls_process_time.push(f.process_time);
+            ls_eyelink_time.push(f.eyelink_time);
+        }
+
+        df! [
+            "name" => ls_name,
+            "idx" => ls_idx,
+            "cam_time" => ls_cam_time,
+            "sys_time" => ls_sys_time,
+            "process_time" => decimal_to_arrow_decimal(ls_process_time),
+            "eyelink_time" => decimal_to_arrow_decimal(ls_eyelink_time),
+
         ]
     }
 }

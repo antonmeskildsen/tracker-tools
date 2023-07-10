@@ -1,6 +1,6 @@
 mod generic;
 
-#[cfg(feature = "polars")]
+#[cfg(feature = "dataframes")]
 mod export;
 
 use crate::generic::{

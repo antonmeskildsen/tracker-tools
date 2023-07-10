@@ -40,6 +40,7 @@ pub struct Trial {
     pub samples: Vec<Sample>,
     pub raw_samples: Vec<RawSample>,
     pub events: Vec<EventRecord>,
+    pub camera_frames: Vec<CameraFrame>,
     pub variables: Vec<String>,
     pub targets: HashMap<String, Vec<TargetInfo>>,
 }
@@ -82,6 +83,17 @@ pub struct Sample {
     pub left: Option<EyeSampleData>,
     pub right: Option<EyeSampleData>,
     pub resolution: Option<Vector>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[cfg_attr(feature = "py-ext", pyclass(get_all))]
+pub struct CameraFrame {
+    pub name: String,
+    pub idx: u32,
+    pub cam_time: u64,
+    pub sys_time: u64,
+    pub process_time: Decimal,
+    pub eyelink_time: Decimal,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -227,6 +239,7 @@ impl Trial {
                 end: Decimal::default(),
             },
             samples: Vec::new(),
+            camera_frames: Vec::new(),
             raw_samples: Vec::new(),
             events: Vec::new(),
             variables: Vec::new(),
@@ -284,6 +297,26 @@ impl RawSample {
             time,
             left: RawEyeSampleData::from_asc(left),
             right: RawEyeSampleData::from_asc(right),
+        }
+    }
+}
+
+impl CameraFrame {
+    pub fn from_asc(
+        name: String,
+        idx: u32,
+        cam_time: u64,
+        sys_time: u64,
+        process_time: Decimal,
+        eyelink_time: Decimal,
+    ) -> Self {
+        CameraFrame {
+            name,
+            idx,
+            cam_time,
+            sys_time,
+            process_time,
+            eyelink_time,
         }
     }
 }
@@ -354,6 +387,23 @@ impl From<Vec<Element>> for Experiment {
         for el in value {
             match el {
                 Element::Msg(time, msg_type) => match msg_type {
+                    MsgType::CameraFrame {
+                        name,
+                        frame_idx,
+                        cam_time,
+                        sys_time,
+                        process_time,
+                        eyelink_time,
+                    } => trials.last_mut().expect("No trial").camera_frames.push(
+                        CameraFrame::from_asc(
+                            name,
+                            frame_idx,
+                            cam_time,
+                            sys_time,
+                            process_time,
+                            eyelink_time,
+                        ),
+                    ),
                     MsgType::RawData { time, left, right } => trials
                         .last_mut()
                         .expect("Raw sample outside trial")

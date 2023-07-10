@@ -1,6 +1,6 @@
 use anyhow::Result;
-use asc_convert::asc::Element;
-use asc_convert::generic::Experiment;
+use ascc::asc::Element;
+use ascc::generic::Experiment;
 use indicatif::{ParallelProgressIterator, ProgressIterator};
 use rayon::prelude::*;
 use rust_decimal::Decimal;
@@ -38,7 +38,7 @@ fn main() -> Result<()> {
         }
     }
 
-    let s = std::fs::read_to_string("test_files/SmoothPursuits_128_2.asc")?;
+    let s = std::fs::read_to_string("test_files/Reaction_144_0.asc")?;
 
     let lines: Vec<&str> = s.lines().collect();
     let nlines = lines.len();

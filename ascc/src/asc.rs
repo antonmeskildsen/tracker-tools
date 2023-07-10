@@ -156,6 +156,14 @@ pub enum MsgType {
     TrialVarLabels(Vec<String>),
     TrialVarGrouping(Vec<String>),
     TrialData(TrialData),
+    CameraFrame {
+        name: String,
+        frame_idx: u32,
+        cam_time: u64,
+        sys_time: u64,
+        process_time: Decimal,
+        eyelink_time: Decimal,
+    },
     Other(String),
     RawData {
         time: Decimal,
@@ -489,12 +497,27 @@ impl FromStr for MsgType {
                 &s[parts[0].len() + 1..],
             )?)),
             "L" => {
-                let parts: Vec<&str> = s[2..].split_whitespace().collect();
-
-                let time = from_decimal(parts[0])?;
-                let left = RawSampleMsg::from_str_slice(&parts[1..9])?;
-                let right = RawSampleMsg::from_str_slice(&parts[10..])?;
+                let time = from_decimal(parts[1])?;
+                let left = RawSampleMsg::from_str_slice(&parts[2..10])?;
+                let right = RawSampleMsg::from_str_slice(&parts[11..])?;
                 Ok(MsgType::RawData { time, left, right })
+            }
+            "CAM_FRAME" => {
+                let name = parts[1].to_string();
+                let frame_idx = u32::from_str(parts[2])?;
+                let cam_time = u64::from_str(parts[3])?;
+                let sys_time = u64::from_str(parts[4])?;
+                let process_time = from_decimal(parts[5])?;
+                let eyelink_time = from_decimal(parts[6])?;
+
+                Ok(MsgType::CameraFrame {
+                    name,
+                    frame_idx,
+                    cam_time,
+                    sys_time,
+                    process_time,
+                    eyelink_time,
+                })
             }
             _ => Ok(MsgType::Other(s.to_string())),
         }
