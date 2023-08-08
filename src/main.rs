@@ -3,7 +3,7 @@ mod gui;
 use anyhow::Result;
 use ascc::asc::Element;
 use ascc::generic::Experiment;
-use indicatif::{ParallelProgressIterator};
+use indicatif::ParallelProgressIterator;
 use rayon::prelude::*;
 
 use std::collections::HashMap;
@@ -12,8 +12,8 @@ use std::io::BufWriter;
 use std::path::PathBuf;
 use std::str::FromStr;
 
-use clap::{Parser, Subcommand};
 use ascc::{load_asc_from_file, load_asc_from_file_with_progress};
+use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
 #[command(author, version, about)]
@@ -30,10 +30,7 @@ enum Commands {
         #[arg(short, long)]
         output: PathBuf,
     },
-    Gui {
-        #[arg(short, long)]
-        input: PathBuf,
-    }
+    Gui,
 }
 
 fn main() -> Result<()> {
@@ -72,12 +69,10 @@ fn main() -> Result<()> {
             let wr = BufWriter::new(out);
             ciborium::ser::into_writer(&gd, wr)?;
         }
-        Commands::Gui { input } => {
-            let exp = load_asc_from_file_with_progress(input.clone())?;
-            gui::run(exp).expect("error");
+        Commands::Gui => {
+            gui::run().expect("error");
         }
     }
-
 
     Ok(())
 }

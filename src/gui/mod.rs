@@ -1,67 +1,59 @@
-mod plots;
-
-use crate::gui::plots::create_line;
-use ascc::generic::{Experiment, Trial};
-use ascc::load_asc_from_file;
-use eframe::Frame;
-use egui::widgets::plot;
-use egui::{Color32, Context, RichText, ScrollArea};
-use egui_extras::{Column, TableBuilder};
-use egui_file::FileDialog;
-use std::iter::zip;
 use std::path::PathBuf;
 
-pub fn run(exp: Experiment) -> eframe::Result<()> {
+use eframe::Frame;
+use egui::{Color32, Context, RichText, Ui, WidgetText};
+use egui_dock::{DockArea, Style, TabViewer, Tree};
+use egui_file::FileDialog;
+
+use crate::gui::convert::EdfConverter;
+use ascc::generic::{Experiment, Trial};
+use ascc::load_asc_from_file;
+
+use crate::gui::experiment_viewer::ExperimentViewer;
+use crate::gui::home::HomeView;
+
+mod convert;
+mod experiment_viewer;
+mod home;
+mod plots;
+
+pub fn run() -> eframe::Result<()> {
     let mut native_options = eframe::NativeOptions::default();
     native_options.maximized = true;
     eframe::run_native(
         "viscom gui",
         native_options,
-        Box::new(|cc| Box::new(AscViewerApp::new(exp))),
+        Box::new(|cc| Box::new(TrackerToolsApp::new())),
     )
 }
 
-pub struct AscViewerApp {
-    pub exp: Experiment,
-    pub open_trials: Vec<bool>,
-    pub current_trial: i32,
-    pub show_metadata: bool,
-    pub show_variables: bool,
-    pub plot_options: PlotOptions,
-    pub file_dialog: Option<FileDialog>,
-    pub opened_file: Option<PathBuf>,
+#[derive(Default)]
+pub struct TrackerToolsApp {
+    tabs: Tree<Tab>,
+    file_dialog: Option<FileDialog>,
+    opened_file: Option<PathBuf>,
+    status: AppStatus,
 }
 
 #[derive(Default)]
-pub struct PlotOptions {
-    pub left_x: bool,
-    pub left_y: bool,
-    pub right_x: bool,
-    pub right_y: bool,
-    pub velocity_left: bool,
-    pub velocity_right: bool,
+pub enum AppStatus {
+    #[default]
+    None,
+    Msg(String),
+    Err(String),
 }
 
-impl AscViewerApp {
-    pub fn new(exp: Experiment) -> Self {
-        let open_trials = vec![false; exp.trials.len()];
-        AscViewerApp {
-            exp,
-            open_trials,
-            current_trial: 0,
-            show_metadata: false,
-            show_variables: false,
-            plot_options: PlotOptions::default(),
-            file_dialog: None,
-            opened_file: None,
+impl TrackerToolsApp {
+    fn new() -> Self {
+        TrackerToolsApp {
+            tabs: Tree::new(vec![Tab::new("Home", HomeView)]),
+            ..Default::default()
         }
     }
 }
 
-impl eframe::App for AscViewerApp {
+impl eframe::App for TrackerToolsApp {
     fn update(&mut self, ctx: &Context, frame: &mut Frame) {
-        let current_trial = self.exp.trials[self.current_trial as usize].clone();
-
         egui::TopBottomPanel::top("main_menu").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
@@ -77,150 +69,83 @@ impl eframe::App for AscViewerApp {
         if let Some(dialog) = &mut self.file_dialog {
             if dialog.show(ctx).selected() {
                 if let Some(file) = dialog.path() {
-                    self.opened_file = Some(file.clone());
+                    let ext = file.extension().unwrap().to_str().unwrap();
+                    let title = file.file_name().unwrap().to_str().unwrap();
+                    match ext {
+                        "asc" => {
+                            self.opened_file = Some(file.clone());
 
-                    self.exp = load_asc_from_file(file).unwrap();
+                            let exp = load_asc_from_file(file.clone()).unwrap();
+
+                            self.tabs.push_to_first_leaf(Tab::new(
+                                title,
+                                ExperimentViewer::new(exp.clone(), title.to_string()),
+                            ));
+                        }
+                        "EDF" | "edf" => {
+                            self.tabs.push_to_first_leaf(Tab::new(
+                                title,
+                                EdfConverter::new(vec![file.clone()]),
+                            ));
+                        }
+                        _ => self.status = AppStatus::Err(format!("invalid file extension {ext}")),
+                    }
                 }
             }
         }
 
-        egui::SidePanel::left("trials").show(ctx, |ui| {
-            ui.vertical_centered(|ui| ui.heading("Trials:"));
-            for (i, trial) in self.exp.trials.iter().enumerate() {
-                ui.selectable_value(
-                    &mut self.current_trial,
-                    i as i32,
-                    format!("trial {}", trial.id),
-                );
+        egui::TopBottomPanel::bottom("status_panel").show(ctx, |ui| match &self.status {
+            AppStatus::None => {}
+            AppStatus::Msg(s) => {
+                ui.label(s);
             }
-
-            ui.separator();
-            ui.heading(RichText::new("Tasks").size(20.0));
-
-            ui.toggle_value(&mut self.show_metadata, "Metadata");
-            ui.toggle_value(&mut self.show_variables, "Trial variables");
-            // should be menu button
+            AppStatus::Err(e) => {
+                ui.label(RichText::new(e).color(Color32::RED));
+            }
         });
 
-        egui::SidePanel::right("info").show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.heading(format!("Inspector for trial {}", self.current_trial));
-            });
-
-            ui.separator();
-            ui.label("Overview");
-            egui::Grid::new("overview_grid")
-                .num_columns(2)
-                .striped(true)
-                .show(ui, |ui| {
-                    ui.label("events:");
-                    ui.label(current_trial.events.len().to_string());
-                    ui.end_row();
-
-                    ui.label("samples:");
-                    ui.label(current_trial.samples.len().to_string());
-                    ui.end_row();
-
-                    ui.label("raw samples:");
-                    ui.label(current_trial.raw_samples.len().to_string());
-                    ui.end_row();
-                });
+        egui::CentralPanel::default().show(ctx, |ui| {
+            DockArea::new(&mut self.tabs)
+                .style(Style::from_egui(ui.style().as_ref()))
+                .show_inside(ui, &mut ETabViewer {});
         });
-
-        egui::CentralPanel::default().show(&ctx, |ui| {
-            plot::Plot::new(format!("view{}", self.current_trial))
-                .view_aspect(2.0)
-                .show(ui, |plot_ui| {
-                    if self.plot_options.left_x {
-                        let line_left_x = create_line(
-                            &current_trial.samples,
-                            |x| Some(x.time),
-                            |y| Some(y.left?.position[0]),
-                        )
-                        .color(Color32::RED);
-                        plot_ui.line(line_left_x);
-                    }
-
-                    if self.plot_options.right_x {
-                        let line_right_x = create_line(
-                            &current_trial.samples,
-                            |x| Some(x.time),
-                            |y| Some(y.right?.position[0]),
-                        )
-                        .color(Color32::LIGHT_RED);
-                        plot_ui.line(line_right_x);
-                    }
-
-                    if self.plot_options.left_y {
-                        let line = create_line(
-                            &current_trial.samples,
-                            |x| Some(x.time),
-                            |y| Some(y.left?.position[1]),
-                        )
-                        .color(Color32::BLUE);
-                        plot_ui.line(line);
-                    }
-
-                    if self.plot_options.right_y {
-                        let line = create_line(
-                            &current_trial.samples,
-                            |x| Some(x.time),
-                            |y| Some(y.right?.position[1]),
-                        )
-                        .color(Color32::LIGHT_BLUE);
-                        plot_ui.line(line);
-                    }
-                });
-
-            ui.checkbox(&mut self.plot_options.left_x, "left eye x");
-            ui.checkbox(&mut self.plot_options.right_x, "right eye x");
-            ui.checkbox(&mut self.plot_options.left_y, "left eye y");
-            ui.checkbox(&mut self.plot_options.right_y, "right eye y");
-        });
-
-        if self.show_metadata {
-            egui::Window::new("Metadata").show(ctx, |ui| {
-                for l in &self.exp.meta.preamble_lines {
-                    ui.label(l);
-                }
-            });
-        }
-
-        egui::Window::new("Trial variables")
-            .open(&mut self.show_variables)
-            .default_size([600., 400.])
-            .show(ctx, |ui| {
-                TableBuilder::new(ui)
-                    .column(Column::auto())
-                    .columns(Column::auto(), self.exp.variable_labels.len())
-                    .header(20.0, |mut header| {
-                        header.col(|ui| {
-                            ui.heading("Variable");
-                        });
-                        for i in 0..self.exp.variable_labels.len() {
-                            header.col(|ui| {
-                                ui.heading(format!("trial {i}"));
-                            });
-                        }
-                    })
-                    .body(|mut body| {
-                        for (name, trial) in zip(&self.exp.variable_labels, &self.exp.trials) {
-                            body.row(20.0, |mut row| {
-                                row.col(|ui| {
-                                    ui.label(name);
-                                });
-                                for val in &trial.variables {
-                                    row.col(|ui| {
-                                        ui.label(val);
-                                    });
-                                }
-                            });
-                        }
-                    });
-            });
     }
 }
 
 pub struct TrialWindow {
     pub trial: Trial,
+}
+
+pub struct ETabViewer;
+
+pub struct Tab {
+    title: String,
+    view: Box<dyn TabView>,
+}
+
+impl Tab {
+    pub fn new<S: Into<String>, T: TabView + 'static>(title: S, view: T) -> Self {
+        Tab {
+            title: title.into(),
+            view: Box::new(view),
+        }
+    }
+}
+
+pub trait TabView {
+    fn ui(&mut self, ui: &mut Ui);
+}
+
+impl TabViewer for ETabViewer {
+    type Tab = Tab;
+
+    fn ui(&mut self, ui: &mut Ui, tab: &mut Self::Tab) {
+        ui.push_id(&tab.title, |ui| {
+            tab.view.ui(ui);
+        });
+    }
+
+    fn title(&mut self, tab: &mut Self::Tab) -> WidgetText {
+        (&tab.title).into()
+    }
 }
