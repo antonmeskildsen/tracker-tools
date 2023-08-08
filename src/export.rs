@@ -40,11 +40,8 @@
 
 use crate::generic::{Experiment, Trial};
 use crate::Decimal;
-use polars::export::chrono::NaiveTime;
 use polars::prelude::AnyValue;
 use polars::prelude::*;
-use rust_decimal::prelude::ToPrimitive;
-use std::collections::{HashMap, HashSet};
 
 impl Experiment {
     pub fn trial_variables(&self) -> PolarsResult<DataFrame> {

@@ -3,21 +3,46 @@ name = "analysis-tools"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
-[workspace]
-members = [
-    "ascc"
-]
-
 [lib]
-name="va"
-src="src/lib.rs"
+name = "ascc"
+src = "src/lib.rs"
+
+crate-type = ["rlib", "cdylib"]
 
 [profile.dev]
 opt-level = 3
 
 [dependencies]
+rust_decimal = { version = "1.29.1", features = ["serde-float"] }
+chrono = { version = "0.4.24", features = ["serde"] }
+anyhow = { version = "1.0.70", features = ["backtrace"] }
 
-polars = {version="0.28.0", features=["parquet", "dtype-decimal"]}
+indicatif = { version = "0.17.3", features = ["rayon"] }
 
+rayon = "1.7.0"
+itertools = "0.10.5"
+
+serde = "1.0.160"
+serde_json = "1.0.96"
+ciborium = "0.2.0"
+
+clap = { version = "4.2.2", features = ["derive"] }
+
+pyo3 = { version = "0.18.3", features = ["extension-module", "anyhow"], optional = true }
+polars = { version = "0.28.0", features = ["parquet", "dtype-decimal"], optional = true }
+arrow2 = { version = "0.17.0", optional = true }
+
+egui = { version = "0.22.0", optional = true }
+egui_extras = { version = "0.22.0", optional = true }
+egui_file = { version = "0.9", optional = true }
+eframe = { version = "0.22.0", optional = true }
+
+[features]
+default = ["gui"]
+py-ext = ["dep:pyo3"]
+dataframes = ["dep:polars", "dep:arrow2"]
+gui = ["dep:egui", "dep:eframe", "dep:egui_file"]
+
+[[example]]
+name = "export"
+required-features = ["dataframes"]

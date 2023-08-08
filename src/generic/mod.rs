@@ -1,4 +1,6 @@
-use crate::asc::{Element, MsgType, PreambleMsg, RawSampleMsg, TrialData};
+mod helpers;
+
+use crate::asc::{CameraFrameVersion, Element, MsgType, PreambleMsg, RawSampleMsg, TrialData};
 use crate::common::Eye;
 use crate::{Decimal, NaiveDateTime};
 use anyhow::anyhow;
@@ -25,7 +27,7 @@ pub struct MetaData {
     pub preamble_lines: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct TimeRecord {
     pub start: Decimal,
@@ -45,14 +47,14 @@ pub struct Trial {
     pub targets: HashMap<String, Vec<TargetInfo>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct TargetInfo {
     time: Decimal,
-    position: [u32; 2],
+    position: [i32; 2],
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct EventRecord {
     time_record: TimeRecord,
@@ -61,7 +63,7 @@ pub struct EventRecord {
     info: EventInfo,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum EventInfo {
     Fixation {
         average_position: Position,
@@ -76,7 +78,7 @@ pub enum EventInfo {
     Blink,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct Sample {
     pub time: Decimal,
@@ -89,14 +91,15 @@ pub struct Sample {
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct CameraFrame {
     pub name: String,
+    pub version: CameraFrameVersion,
     pub idx: u32,
     pub cam_time: u64,
     pub sys_time: u64,
     pub process_time: Decimal,
-    pub eyelink_time: Decimal,
+    pub eyelink_time: Option<Decimal>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct RawSample {
     pub time: Decimal,
@@ -107,7 +110,7 @@ pub struct RawSample {
 pub type Position = [Decimal; 2];
 pub type Vector = [Decimal; 2];
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct EyeSampleData {
     pub position: Position,
@@ -116,7 +119,7 @@ pub struct EyeSampleData {
     pub cr: CRStatus,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct RawEyeSampleData {
     pub pupil_position: Position,
@@ -126,7 +129,7 @@ pub struct RawEyeSampleData {
     pub cr_area: Decimal,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub enum CRStatus {
     Missing,
@@ -273,7 +276,7 @@ impl EyeSampleData {
         Some(EyeSampleData {
             position: [pos_x?, pos_y?],
             area: area?,
-            velocity: velocity_x.and_then(|x| velocity_y.and_then(|y| Some([x, y]))),
+            velocity: velocity_x.and_then(|x| velocity_y.map(|y| [x, y])),
             cr: CRStatus::from_asc(cr_missing, cr_recovering),
         })
     }
@@ -304,14 +307,16 @@ impl RawSample {
 impl CameraFrame {
     pub fn from_asc(
         name: String,
+        version: CameraFrameVersion,
         idx: u32,
         cam_time: u64,
         sys_time: u64,
         process_time: Decimal,
-        eyelink_time: Decimal,
+        eyelink_time: Option<Decimal>,
     ) -> Self {
         CameraFrame {
             name,
+            version,
             idx,
             cam_time,
             sys_time,
@@ -363,17 +368,17 @@ impl Sample {
                 right_cr_missing,
                 right_cr_recovering,
             ),
-            resolution: res_x.and_then(|x| res_y.and_then(|y| Some([x, y]))),
+            resolution: res_x.and_then(|x| res_y.map(|y| [x, y])),
         }
     }
 }
 
-fn push_sample(sample: Sample, trials: &mut Vec<Trial>) {
+fn push_sample(sample: Sample, trials: &mut [Trial]) {
     let last = trials.last_mut().expect("No trial");
     last.samples.push(sample);
 }
 
-fn push_event(event: EventRecord, trials: &mut Vec<Trial>) {
+fn push_event(event: EventRecord, trials: &mut [Trial]) {
     let last = trials.last_mut().expect("No trial");
     last.events.push(event);
 }
@@ -389,6 +394,7 @@ impl From<Vec<Element>> for Experiment {
                 Element::Msg(time, msg_type) => match msg_type {
                     MsgType::CameraFrame {
                         name,
+                        version,
                         frame_idx,
                         cam_time,
                         sys_time,
@@ -397,6 +403,7 @@ impl From<Vec<Element>> for Experiment {
                     } => trials.last_mut().expect("No trial").camera_frames.push(
                         CameraFrame::from_asc(
                             name,
+                            version,
                             frame_idx,
                             cam_time,
                             sys_time,

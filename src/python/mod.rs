@@ -11,19 +11,19 @@ use chrono::{Datelike, ParseResult, Timelike};
 use pyo3::prelude::*;
 use pyo3::types::{PyDateTime, PyDict, PyList, PyString};
 use rust_decimal::prelude::ToPrimitive;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Display, Formatter};
 use std::ops::Sub;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 #[pyfunction]
 fn load_asc_from_file(path: PathBuf) -> PyResult<Experiment> {
-    let exp = crate::load_asc_from_file(path)?;
+    let exp = crate::load_asc_from_file_with_progress(path)?;
     Ok(exp)
 }
 
 #[pymodule]
-fn ascc(py: Python<'_>, m: &PyModule) -> PyResult<()> {
+fn ascc(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<Experiment>()?;
     m.add_class::<Trial>()?;
     m.add_class::<MetaData>()?;
@@ -128,7 +128,7 @@ impl ToPyObject for EventInfo {
 }
 
 impl IntoPy<PyObject> for EventInfo {
-    fn into_py(self, py: Python<'_>) -> PyObject {
+    fn into_py(self, _py: Python<'_>) -> PyObject {
         todo!()
     }
 }

@@ -6,7 +6,7 @@ use std::str::FromStr;
 #[cfg(feature = "py-ext")]
 use pyo3::pyclass;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[cfg_attr(feature = "py-ext", pyclass)]
 pub enum Eye {
     Left,

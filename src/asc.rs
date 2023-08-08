@@ -1,8 +1,9 @@
-use anyhow::anyhow;
+use anyhow::{anyhow, Context};
 
 use crate::common::Eye;
 use crate::{Decimal, NaiveDateTime};
-use itertools::Itertools;
+
+use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::str::FromStr;
 
@@ -113,9 +114,13 @@ pub enum Element {
 
 #[derive(Debug, Clone)]
 pub struct DataOptions {
+    #[allow(unused)]
     res: bool,
+    #[allow(unused)]
     rate: Decimal,
+    #[allow(unused)]
     tracking: TrackingMode,
+    #[allow(unused)]
     filter: FilterType,
 }
 
@@ -158,11 +163,12 @@ pub enum MsgType {
     TrialData(TrialData),
     CameraFrame {
         name: String,
+        version: CameraFrameVersion,
         frame_idx: u32,
         cam_time: u64,
         sys_time: u64,
         process_time: Decimal,
-        eyelink_time: Decimal,
+        eyelink_time: Option<Decimal>,
     },
     Other(String),
     RawData {
@@ -170,6 +176,12 @@ pub enum MsgType {
         left: RawSampleMsg,
         right: RawSampleMsg,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum CameraFrameVersion {
+    V1, // Used for unspecified version
+    V2, // The first version where the number is specified in the .asc file
 }
 
 #[derive(Debug, Clone)]
@@ -201,7 +213,7 @@ pub enum TrialData {
 #[derive(Debug, Clone)]
 pub struct Target {
     pub name: String,
-    pub position: [u32; 2],
+    pub position: [i32; 2],
     pub visible: bool,
     pub interpolate: bool,
 }
@@ -214,7 +226,9 @@ pub enum TrackingAlgorithm {
 
 #[derive(Debug, Clone)]
 pub struct ThresholdSpec {
+    #[allow(unused)]
     pupil: u32,
+    #[allow(unused)]
     cr: u32,
 }
 
@@ -258,10 +272,11 @@ pub fn from_decimal(s: &str) -> Result<Decimal, rust_decimal::Error> {
     Decimal::from_str(s).or_else(|_| Decimal::from_scientific(s))
 }
 
-pub fn maybe_decimal(s: &str) -> Result<Option<Decimal>, rust_decimal::Error> {
+pub fn maybe_decimal(s: &str) -> anyhow::Result<Option<Decimal>> {
     (s != ".")
         .then(|| from_decimal(s))
         .map_or(Ok(None), |v| v.map(Some))
+        .context("when converting decimal from string")
 }
 
 impl FromStr for Element {
@@ -269,7 +284,7 @@ impl FromStr for Element {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let parts: Vec<&str> = s.split_whitespace().collect();
-        if parts.len() == 0 {
+        if parts.is_empty() {
             Ok(Element::Blank)
         } else {
             match parts[0] {
@@ -503,15 +518,22 @@ impl FromStr for MsgType {
                 Ok(MsgType::RawData { time, left, right })
             }
             "CAM_FRAME" => {
-                let name = parts[1].to_string();
-                let frame_idx = u32::from_str(parts[2])?;
-                let cam_time = u64::from_str(parts[3])?;
-                let sys_time = u64::from_str(parts[4])?;
-                let process_time = from_decimal(parts[5])?;
-                let eyelink_time = from_decimal(parts[6])?;
+                let mut p_iter = parts[1..].iter();
+                let first = p_iter.next().unwrap().to_string();
+                let (version, name) = if first == "V2" {
+                    (CameraFrameVersion::V2, p_iter.next().unwrap().to_string())
+                } else {
+                    (CameraFrameVersion::V1, first)
+                };
+                let frame_idx = u32::from_str(p_iter.next().unwrap())?;
+                let cam_time = u64::from_str(p_iter.next().unwrap())?;
+                let sys_time = u64::from_str(p_iter.next().unwrap())?;
+                let process_time = from_decimal(p_iter.next().unwrap())?;
+                let eyelink_time = p_iter.next().map(|v| from_decimal(v)).transpose()?;
 
                 Ok(MsgType::CameraFrame {
                     name,
+                    version,
                     frame_idx,
                     cam_time,
                     sys_time,
@@ -561,9 +583,9 @@ impl Target {
     fn from_str_slice(s: &[&str]) -> anyhow::Result<Self> {
         let name = s[0].to_string();
         let position_x_str = s[1];
-        let position_x = u32::from_str(&position_x_str[1..position_x_str.len() - 1])?;
+        let position_x = i32::from_str(&position_x_str[1..position_x_str.len() - 1])?;
         let position_y_str = s[2];
-        let position_y = u32::from_str(&position_y_str[..position_y_str.len() - 1])?;
+        let position_y = i32::from_str(&position_y_str[..position_y_str.len() - 1])?;
         let visible = i32::from_str(s[3])? == 1;
         let interpolate = i32::from_str(s[4])? == 1;
         Ok(Target {
@@ -587,7 +609,7 @@ impl FromStr for TrialData {
             }
             "TARGET_POS" => {
                 let mut targets = Vec::new();
-                if parts.len() == 6 {
+                if parts.len() >= 6 {
                     targets.push(Target::from_str_slice(&parts[1..6])?)
                 }
                 if parts.len() == 11 {
