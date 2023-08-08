@@ -41,7 +41,7 @@ eframe = { version = "0.22.0", optional = true }
 default = ["gui"]
 py-ext = ["dep:pyo3"]
 dataframes = ["dep:polars", "dep:arrow2"]
-gui = ["dep:egui", "dep:eframe", "dep:egui_file"]
+gui = ["dep:egui", "dep:eframe", "dep:egui_file", "dep:egui_extras"]
 
 [[example]]
 name = "export"

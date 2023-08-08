@@ -6,11 +6,14 @@ use ascc::load_asc_from_file;
 use eframe::Frame;
 use egui::widgets::plot;
 use egui::{Color32, Context, RichText, ScrollArea};
+use egui_extras::{Column, TableBuilder};
 use egui_file::FileDialog;
+use std::iter::zip;
 use std::path::PathBuf;
 
 pub fn run(exp: Experiment) -> eframe::Result<()> {
-    let native_options = eframe::NativeOptions::default();
+    let mut native_options = eframe::NativeOptions::default();
+    native_options.maximized = true;
     eframe::run_native(
         "viscom gui",
         native_options,
@@ -47,6 +50,7 @@ impl AscViewerApp {
             open_trials,
             current_trial: 0,
             show_metadata: false,
+            show_variables: false,
             plot_options: PlotOptions::default(),
             file_dialog: None,
             opened_file: None,
@@ -182,9 +186,38 @@ impl eframe::App for AscViewerApp {
             });
         }
 
-        if self.show_variables {
-            egui::Window::new("Trial variables").show(ctx, |ui| TableB);
-        }
+        egui::Window::new("Trial variables")
+            .open(&mut self.show_variables)
+            .default_size([600., 400.])
+            .show(ctx, |ui| {
+                TableBuilder::new(ui)
+                    .column(Column::auto())
+                    .columns(Column::auto(), self.exp.variable_labels.len())
+                    .header(20.0, |mut header| {
+                        header.col(|ui| {
+                            ui.heading("Variable");
+                        });
+                        for i in 0..self.exp.variable_labels.len() {
+                            header.col(|ui| {
+                                ui.heading(format!("trial {i}"));
+                            });
+                        }
+                    })
+                    .body(|mut body| {
+                        for (name, trial) in zip(&self.exp.variable_labels, &self.exp.trials) {
+                            body.row(20.0, |mut row| {
+                                row.col(|ui| {
+                                    ui.label(name);
+                                });
+                                for val in &trial.variables {
+                                    row.col(|ui| {
+                                        ui.label(val);
+                                    });
+                                }
+                            });
+                        }
+                    });
+            });
     }
 }
 
