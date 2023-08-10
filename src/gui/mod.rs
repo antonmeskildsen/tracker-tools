@@ -1,8 +1,10 @@
+use std::fs::File;
+use std::io::BufReader;
 use std::path::PathBuf;
 
 use eframe::Frame;
 use egui::{Color32, Context, RichText, Ui, WidgetText};
-use egui_dock::{DockArea, Style, TabViewer, Tree};
+use egui_dock::{DockArea, NodeIndex, Style, TabViewer, Tree};
 use egui_file::FileDialog;
 
 use crate::gui::convert::EdfConverter;
@@ -63,6 +65,15 @@ impl eframe::App for TrackerToolsApp {
                         self.file_dialog = Some(dialog);
                     }
                 });
+                ui.menu_button("Tools", |ui| {
+                    if ui.button("Converter").clicked() {
+                        self.tabs.split_left(
+                            NodeIndex::root(),
+                            0.2,
+                            vec![Tab::new("converter", EdfConverter::new(vec![]))],
+                        );
+                    }
+                })
             });
         });
 
@@ -86,6 +97,24 @@ impl eframe::App for TrackerToolsApp {
                             self.tabs.push_to_first_leaf(Tab::new(
                                 title,
                                 EdfConverter::new(vec![file.clone()]),
+                            ));
+                        }
+                        "cbor" => {
+                            let base = File::open(&file).unwrap();
+
+                            let exp = ciborium::de::from_reader(BufReader::new(base)).unwrap();
+                            self.tabs.push_to_first_leaf(Tab::new(
+                                title,
+                                ExperimentViewer::new(exp, title.to_string()),
+                            ));
+                        }
+                        "json" => {
+                            let base = File::open(&file).unwrap();
+
+                            let exp = serde_json::from_reader(BufReader::new(base)).unwrap();
+                            self.tabs.push_to_first_leaf(Tab::new(
+                                title,
+                                ExperimentViewer::new(exp, title.to_string()),
                             ));
                         }
                         _ => self.status = AppStatus::Err(format!("invalid file extension {ext}")),
