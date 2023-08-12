@@ -5,8 +5,12 @@ use std::str::FromStr;
 
 #[cfg(feature = "py-ext")]
 use pyo3::pyclass;
+use rkyv::Archive;
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone, Copy,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass)]
 pub enum Eye {
     Left,

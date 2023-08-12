@@ -3,8 +3,10 @@ use ascc::load_asc_from_file;
 use atomic_float::{AtomicF32, AtomicF64};
 use egui::{Color32, Context, Frame, ProgressBar, RichText, Ui, Widget};
 use egui_file::FileDialog;
+use flate2::write::{GzEncoder, ZlibEncoder};
+use flate2::Compression;
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::atomic::Ordering;
@@ -22,6 +24,12 @@ pub struct EdfConverter {
     file_dialog: Option<FileDialog>,
     exp_result: Option<anyhow::Result<()>>,
     progress: Arc<AtomicF32>,
+    options: ConversionOptions,
+}
+
+#[derive(Default, Clone)]
+pub struct ConversionOptions {
+    compressed: bool,
 }
 
 impl EdfConverter {
@@ -34,6 +42,7 @@ impl EdfConverter {
             file_dialog: None,
             exp_result: None,
             progress: Arc::new(AtomicF32::new(0.)),
+            options: ConversionOptions::default(),
         }
     }
 
@@ -46,6 +55,7 @@ impl EdfConverter {
         let ctx_clone = ctx.clone();
 
         let progress = self.progress.clone();
+        let options = self.options.clone();
 
         let handle = thread::spawn(move || {
             let step = 1. / (files.len() as f32);
@@ -53,12 +63,9 @@ impl EdfConverter {
                 let mut asc_name = file.clone();
                 asc_name.set_extension("asc");
 
-                let mut cbor_file = file.clone();
-                cbor_file.set_extension("json");
-
                 tx.send(format!("converting {} to asc", file.display()))?;
                 let mut child = Command::new("edf2asc")
-                    .arg(file)
+                    .arg(file.clone())
                     .arg("-y")
                     .arg("-res")
                     .arg("-vel")
@@ -89,10 +96,26 @@ impl EdfConverter {
                 let exp = load_asc_from_file(asc_name)?;
                 progress.fetch_add(step / 3., Ordering::Relaxed);
 
-                let out_file = File::create(&cbor_file)?;
-                tx.send(format!("writing to {}", cbor_file.display()))?;
-                ciborium::ser::into_writer(&exp, BufWriter::new(out_file))?;
+                // ciborium::ser::into_writer(&exp, BufWriter::new(out_file))?;
                 // serde_json::to_writer(BufWriter::new(out_file), &exp)?;
+                // let v = postcard::to_stdvec(&exp)?;
+                // BufWriter::new(out_file).write(&v)?;
+                let bytes = rkyv::to_bytes::<_, 256>(&exp)?;
+                let mut exported_file = file.clone();
+
+                if options.compressed {
+                    exported_file.set_extension("dat.archive");
+                    let out_file = File::create(&exported_file)?;
+                    tx.send(format!("writing to {}", exported_file.display()))?;
+                    let mut e = GzEncoder::new(Vec::new(), Compression::fast());
+                    e.write_all(&bytes).unwrap();
+                    BufWriter::new(out_file).write(&e.finish().unwrap())?;
+                } else {
+                    exported_file.set_extension("dat");
+                    let out_file = File::create(&exported_file)?;
+                    tx.send(format!("writing to {}", exported_file.display()))?;
+                    BufWriter::new(out_file).write(&bytes)?;
+                }
 
                 progress.fetch_add(step / 3., Ordering::Relaxed);
             }
@@ -107,6 +130,8 @@ impl EdfConverter {
 impl TabView for EdfConverter {
     fn ui(&mut self, ui: &mut Ui) {
         ui.heading("Converter");
+
+        ui.checkbox(&mut self.options.compressed, "Compress output");
 
         Frame::none().fill(Color32::DARK_GRAY).show(ui, |ui| {
             for f in &self.files {

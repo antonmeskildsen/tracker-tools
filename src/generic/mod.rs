@@ -10,7 +10,10 @@ use std::collections::HashMap;
 #[cfg(feature = "py-ext")]
 use pyo3::prelude::*;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct Experiment {
     /// Additional metadata
@@ -20,21 +23,38 @@ pub struct Experiment {
     pub trials: Vec<Trial>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone, Default,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct MetaData {
     pub recording_datetime: NaiveDateTime,
     pub preamble_lines: Vec<String>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy, Default)]
+#[derive(
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    Serialize,
+    Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    Default,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct TimeRecord {
     pub start: Decimal,
     pub end: Decimal,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct Trial {
     pub id: u32,
@@ -47,14 +67,20 @@ pub struct Trial {
     pub targets: HashMap<String, Vec<TargetInfo>>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone, Copy,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct TargetInfo {
     time: Decimal,
     position: [i32; 2],
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone, Copy,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct EventRecord {
     time_record: TimeRecord,
@@ -63,7 +89,10 @@ pub struct EventRecord {
     info: EventInfo,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone, Copy,
+)]
+#[archive(check_bytes)]
 pub enum EventInfo {
     Fixation {
         average_position: Position,
@@ -78,7 +107,10 @@ pub enum EventInfo {
     Blink,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone, Copy,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct Sample {
     pub time: Decimal,
@@ -87,7 +119,10 @@ pub struct Sample {
     pub resolution: Option<Vector>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct CameraFrame {
     pub name: String,
@@ -99,7 +134,10 @@ pub struct CameraFrame {
     pub eyelink_time: Option<Decimal>,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone, Copy,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct RawSample {
     pub time: Decimal,
@@ -110,7 +148,10 @@ pub struct RawSample {
 pub type Position = [Decimal; 2];
 pub type Vector = [Decimal; 2];
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone, Copy,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct EyeSampleData {
     pub position: Position,
@@ -119,7 +160,10 @@ pub struct EyeSampleData {
     pub cr: CRStatus,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone, Copy,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub struct RawEyeSampleData {
     pub pupil_position: Position,
@@ -129,7 +173,10 @@ pub struct RawEyeSampleData {
     pub cr_area: Decimal,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Serialize, Deserialize, Debug, Clone, Copy,
+)]
+#[archive(check_bytes)]
 #[cfg_attr(feature = "py-ext", pyclass(get_all))]
 pub enum CRStatus {
     Missing,

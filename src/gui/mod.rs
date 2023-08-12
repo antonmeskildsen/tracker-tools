@@ -1,11 +1,12 @@
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{BufReader, Read, Write};
 use std::path::PathBuf;
 
 use eframe::Frame;
-use egui::{Color32, Context, RichText, Ui, WidgetText};
+use egui::{Color32, Context, RichText, Ui, Vec2, WidgetText};
 use egui_dock::{DockArea, NodeIndex, Style, TabViewer, Tree};
 use egui_file::FileDialog;
+use flate2::write::{GzDecoder, ZlibDecoder};
 
 use crate::gui::convert::EdfConverter;
 use ascc::generic::{Experiment, Trial};
@@ -21,7 +22,7 @@ mod plots;
 
 pub fn run() -> eframe::Result<()> {
     let mut native_options = eframe::NativeOptions::default();
-    native_options.maximized = true;
+    native_options.initial_window_size = Some(Vec2::new(1280., 800.));
     eframe::run_native(
         "viscom gui",
         native_options,
@@ -67,11 +68,8 @@ impl eframe::App for TrackerToolsApp {
                 });
                 ui.menu_button("Tools", |ui| {
                     if ui.button("Converter").clicked() {
-                        self.tabs.split_left(
-                            NodeIndex::root(),
-                            0.2,
-                            vec![Tab::new("converter", EdfConverter::new(vec![]))],
-                        );
+                        self.tabs
+                            .push_to_focused_leaf(Tab::new("converter", EdfConverter::new(vec![])));
                     }
                 })
             });
@@ -112,6 +110,41 @@ impl eframe::App for TrackerToolsApp {
                             let base = File::open(&file).unwrap();
 
                             let exp = serde_json::from_reader(BufReader::new(base)).unwrap();
+                            self.tabs.push_to_first_leaf(Tab::new(
+                                title,
+                                ExperimentViewer::new(exp, title.to_string()),
+                            ));
+                        }
+                        "pc" => {
+                            let base = File::open(&file).unwrap();
+
+                            let mut bytes = Vec::new();
+                            BufReader::new(base).read_to_end(&mut bytes).unwrap();
+                            let exp = postcard::from_bytes(bytes.as_slice()).unwrap();
+                            self.tabs.push_to_first_leaf(Tab::new(
+                                title,
+                                ExperimentViewer::new(exp, title.to_string()),
+                            ));
+                        }
+                        "dat" => {
+                            let base = File::open(&file).unwrap();
+
+                            let mut bytes = Vec::new();
+                            BufReader::new(base).read_to_end(&mut bytes).unwrap();
+                            let exp = rkyv::from_bytes(&bytes).unwrap();
+                            self.tabs.push_to_first_leaf(Tab::new(
+                                title,
+                                ExperimentViewer::new(exp, title.to_string()),
+                            ));
+                        }
+                        "archive" => {
+                            let base = File::open(&file).unwrap();
+
+                            let mut bytes = Vec::new();
+                            BufReader::new(base).read_to_end(&mut bytes).unwrap();
+                            let mut e = GzDecoder::new(Vec::new());
+                            e.write_all(&mut bytes).unwrap();
+                            let exp = rkyv::from_bytes(e.finish().unwrap().as_slice()).unwrap();
                             self.tabs.push_to_first_leaf(Tab::new(
                                 title,
                                 ExperimentViewer::new(exp, title.to_string()),

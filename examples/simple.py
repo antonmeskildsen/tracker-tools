@@ -3,6 +3,6 @@ import ascc
 
 if __name__ == "__main__":
 
-    exp = ascc.load_asc_from_file("resources/SmoothPursuits_180_1.asc")
+    exp = ascc.load_experiment_file("resources/Patterns_214_0.dat")
 
     print(len(exp.trials))

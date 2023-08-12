@@ -149,29 +149,33 @@ impl TabView for ExperimentViewer {
         egui::Window::new("Trial variables")
             .open(&mut self.show_variables)
             .default_size([600., 400.])
+            .vscroll(true)
             .show(ui.ctx(), |ui| {
                 TableBuilder::new(ui)
-                    .column(Column::auto())
-                    .columns(Column::auto(), self.exp.variable_labels.len())
+                    .column(Column::exact(50.))
+                    .columns(
+                        Column::auto().at_least(200.),
+                        self.exp.variable_labels.len(),
+                    )
                     .header(20.0, |mut header| {
                         header.col(|ui| {
-                            ui.heading("Variable");
+                            ui.label("Variable");
                         });
-                        for i in 0..self.exp.variable_labels.len() {
+                        for name in &self.exp.variable_labels {
                             header.col(|ui| {
-                                ui.heading(format!("trial {i}"));
+                                ui.label(name);
                             });
                         }
                     })
                     .body(|mut body| {
-                        for (name, trial) in zip(&self.exp.variable_labels, &self.exp.trials) {
+                        for (i, trial) in self.exp.trials.iter().enumerate() {
                             body.row(20.0, |mut row| {
                                 row.col(|ui| {
-                                    ui.label(name);
+                                    ui.label(format!("trial {i}"));
                                 });
-                                for val in &trial.variables {
+                                for i in 0..self.exp.variable_labels.len() {
                                     row.col(|ui| {
-                                        ui.label(val);
+                                        ui.label(&trial.variables[i]);
                                     });
                                 }
                             });

@@ -3,12 +3,12 @@ use crate::generic::Experiment;
 use indicatif::{ParallelProgressIterator, ProgressIterator};
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
+use anyhow::Context;
 use std::path::PathBuf;
 use std::str::FromStr;
-use anyhow::Context;
 
 #[cfg(feature = "py-ext")]
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 pub mod asc;
 pub mod common;
@@ -18,14 +18,36 @@ pub mod generic;
 pub mod export;
 
 #[cfg(feature = "py-ext")]
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Default,
+    Debug,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[archive(check_bytes)]
 pub struct Decimal(rust_decimal::Decimal);
 
 #[cfg(not(feature = "py-ext"))]
 pub type Decimal = rust_decimal::Decimal;
 
 #[cfg(feature = "py-ext")]
-#[derive(Clone, Copy, Default, Debug, Serialize, Deserialize)]
+#[derive(
+    Clone,
+    Copy,
+    Default,
+    Debug,
+    Serialize,
+    Deserialize,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[archive(check_bytes)]
 pub struct NaiveDateTime(chrono::NaiveDateTime);
 
 #[cfg(not(feature = "py-ext"))]

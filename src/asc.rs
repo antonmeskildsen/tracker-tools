@@ -3,9 +3,14 @@ use anyhow::{anyhow, Context};
 use crate::common::Eye;
 use crate::{Decimal, NaiveDateTime};
 
+use egui::TextBuffer;
+use rkyv::Archive;
 use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::str::FromStr;
+
+#[cfg(feature = "py-ext")]
+use pyo3::prelude::*;
 
 #[derive(Debug, Clone)]
 pub enum Element {
@@ -178,7 +183,11 @@ pub enum MsgType {
     },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(
+    rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, Debug, Clone, Serialize, Deserialize,
+)]
+#[archive(check_bytes)]
+#[cfg_attr(feature = "py-ext", pyclass)]
 pub enum CameraFrameVersion {
     V1, // Used for unspecified version
     V2, // The first version where the number is specified in the .asc file
@@ -567,10 +576,13 @@ impl FromStr for PreambleMsg {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if let Some(tp) = s.split_whitespace().next() {
             match tp {
-                "DATE:" => Ok(PreambleMsg::DateTime(NaiveDateTime::parse_from_str(
-                    &s[tp.len() + 1..],
-                    "%a %b %d %H:%M:%S %Y",
-                )?)),
+                "DATE:" => Ok(PreambleMsg::DateTime(
+                    NaiveDateTime::parse_from_str(
+                        &s.char_range(tp.len() + 1..s.len()),
+                        "%a %b %e %H:%M:%S %Y",
+                    )
+                    .context("could not parse date")?,
+                )),
                 _ => Ok(PreambleMsg::Other(s.to_string())),
             }
         } else {

@@ -12,6 +12,8 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDateTime, PyDict, PyList, PyString};
 use rust_decimal::prelude::ToPrimitive;
 use std::fmt::{Display, Formatter};
+use std::fs::File;
+use std::io::{BufReader, Read, Write};
 use std::ops::Sub;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -20,6 +22,15 @@ use std::str::FromStr;
 fn load_asc_from_file(path: PathBuf) -> PyResult<Experiment> {
     let exp = crate::load_asc_from_file_with_progress(path)?;
     Ok(exp)
+}
+
+#[pyfunction]
+fn load_experiment_file(path: PathBuf) -> PyResult<Experiment> {
+    let base = File::open(&path)?;
+
+    let mut bytes = Vec::new();
+    BufReader::new(base).read_to_end(&mut bytes)?;
+    Ok(rkyv::from_bytes(&bytes).unwrap())
 }
 
 #[pymodule]
@@ -33,6 +44,7 @@ fn ascc(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<RawSample>()?;
 
     m.add_function(wrap_pyfunction!(load_asc_from_file, m)?)?;
+    m.add_function(wrap_pyfunction!(load_experiment_file, m)?)?;
 
     Ok(())
 }

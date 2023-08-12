@@ -13,8 +13,8 @@ crate-type = ["rlib", "cdylib"]
 opt-level = 3
 
 [dependencies]
-rust_decimal = { version = "1.29.1", features = ["serde-float"] }
-chrono = { version = "0.4.24", features = ["serde"] }
+rust_decimal = { version = "1.29.1", features = ["serde-float", "rkyv-safe"] }
+chrono = { version="0.4.26", path = "../chrono", features = ["serde", "rkyv-validation"] }
 anyhow = { version = "1.0.70", features = ["backtrace"] }
 
 indicatif = { version = "0.17.3", features = ["rayon"] }
@@ -26,7 +26,9 @@ atomic_float = "0.1.0"
 serde = "1.0.160"
 serde_json = "1.0.96"
 ciborium = "0.2.0"
-rkyv = "0.7.42"
+rkyv = { version="0.7.42", features = ["validation", "alloc"] }
+postcard = {version="1.0.4", features = ["use-std"]}
+flate2 = "1.0.26"
 
 clap = { version = "4.2.2", features = ["derive"] }
 
